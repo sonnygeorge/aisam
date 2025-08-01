@@ -12,6 +12,7 @@ from src.block_game.renderer import BlockGameRenderer
 class BlockGameEnv(gym.Env):
     """
     Gymnasium environment for the block stacking game with a 2D action space.
+    Modified to include both current state and goal state in a single concatenated observation.
 
     Environment Description:
     - Goal: Rearrange numbered blocks between stacks to match a target configuration
@@ -19,7 +20,7 @@ class BlockGameEnv(gym.Env):
     - Game ends when current state matches the target state
 
     Unconventional Design Choice - 2D Integer Action Space:
-    - Observation and action spaces are 2D arrays of shape (n_blocks, n_stacks)
+    - Action spaces are 2D arrays of shape (n_blocks, n_stacks)
     - Each element is an integer in {0, 1, ..., n_blocks}, where:
         * 0 represents an empty slot
         * 1 to n_blocks represent block IDs
@@ -27,30 +28,20 @@ class BlockGameEnv(gym.Env):
     - Invalid actions (unreachable states or malformed configurations) receive -1 reward
 
     Observation Space (2D Array):
-    - Shape: (n_blocks, n_stacks)
+    - Shape: (2 * n_blocks, n_stacks) - concatenated current and goal states
+    - First n_blocks rows: current stack configuration
+    - Next n_blocks rows: goal stack configuration
     - Each element is the block ID (1 to n_blocks) or 0 (empty) at that position
-    - Represents the current stack configuration
 
     Action Space (2D Array):
-    - Same shape as observation: (n_blocks, n_stacks)
+    - Shape: (n_blocks, n_stacks)
     - Specifies the target state to achieve in one move
     - Must be reachable from the current state in exactly one valid move
 
     Rewards:
     - +1: Valid move that reduces minimum moves to solution
-    - 0: Valid move that doesn't improve distance to solution
+    - 0.25: Valid move that doesn't improve distance to solution
     - -1: Invalid action (unreachable state or malformed configuration)
-
-    Example:
-    For n_blocks=2, n_stacks=3, if current state is [[1], [2], []]:
-    - obs[0,0] = 1  (bottom of stack 0 has block 1)
-    - obs[0,1] = 2  (bottom of stack 1 has block 2)
-    - obs[0,2] = 0  (bottom of stack 2 is empty)
-    - obs[1,:] = 0  (top level of all stacks is empty)
-
-    Threading/Performance Notes:
-    - Uses BlockGameState.get_min_moves_between() which employs caching
-    - BFS pathfinding can be expensive for complex states
     """
 
     def __init__(
@@ -92,11 +83,13 @@ class BlockGameEnv(gym.Env):
         self.episode_total_reward = 0  # Total reward in the current episode
         self.last_move_was_valid: None | bool = None  # Whether the last move was valid
 
-        # Observation space: 2D array of block IDs (0 for empty, 1 to n_blocks)
+        # Observation space: concatenated current and goal states
+        # Shape: (2 * n_blocks, n_stacks) where first n_blocks rows are current, next n_blocks are goal
         self.observation_space = spaces.MultiDiscrete(
-            [[n_blocks + 1] * n_stacks] * n_blocks, dtype=np.int32
+            [[n_blocks + 1] * n_stacks] * (2 * n_blocks), dtype=np.int32
         )
-        # Action space: same as observation space
+
+        # Action space: target state configuration
         self.action_space = spaces.MultiDiscrete(
             [[n_blocks + 1] * n_stacks] * n_blocks, dtype=np.int32
         )
@@ -135,6 +128,22 @@ class BlockGameEnv(gym.Env):
                 else:
                     obs[height, stack_idx] = 0  # Empty slot
         return obs
+
+    def _get_full_observation(self) -> NDArray[np.int32]:
+        """
+        Get the full observation including both current and goal states concatenated.
+
+        Returns:
+            NDArray: Observation of shape (2 * n_blocks, n_stacks) where:
+                    - First n_blocks rows: current state
+                    - Next n_blocks rows: goal state
+        """
+        current_state_obs = self._state_to_obs(self.game_state)
+        goal_state_obs = self._state_to_obs(self.solution_state)
+
+        # Concatenate along the first dimension
+        full_obs = np.concatenate([current_state_obs, goal_state_obs], axis=0)
+        return full_obs
 
     def _obs_to_state(self, obs: NDArray[np.int32]) -> BlockGameState | None:
         """
@@ -207,8 +216,8 @@ class BlockGameEnv(gym.Env):
 
         Returns:
             tuple: (observation, reward, terminated, truncated, info)
-            - observation: Current state after action (or previous if invalid)
-            - reward: 1 (improvement), 0.3 (valid move, no improvement), or -1 (invalid)
+            - observation: Concatenated current and goal states of shape (2*n_blocks, n_stacks)
+            - reward: 1 (improvement), 0.25 (valid move, no improvement), or -1 (invalid)
             - terminated: True if target state reached
             - truncated: True if max episode length reached
             - info: Empty dict
@@ -232,9 +241,7 @@ class BlockGameEnv(gym.Env):
             if min_moves_after_action < min_moves_before_action:
                 reward = 1  # Progress toward solution
             else:
-                reward = 0.3  # No progress, but still some reward for valid action
-
-            obs = action  # Action represents the new state
+                reward = 0.25  # No progress, but still some reward for valid action
 
             # Update environment state
             self.last_move_was_valid = True
@@ -243,9 +250,10 @@ class BlockGameEnv(gym.Env):
 
         else:
             reward = -1  # Penalize invalid action
-            obs = self.last_returned_obs  # State unchanged
             self.last_move_was_valid = False
 
+        # Always return current observation (whether state changed or not)
+        obs = self._get_full_observation()
         self.episode_total_reward += reward
         terminated = self.min_moves_to_solution == 0
 
@@ -297,8 +305,8 @@ class BlockGameEnv(gym.Env):
             self.solution_state.apply_action(*first_valid_move)
             self.min_moves_to_solution = 1
 
-        # Return initial observation
-        obs = self._state_to_obs(self.game_state)
+        # Return initial observation with both current and goal states
+        obs = self._get_full_observation()
         self.last_returned_obs = obs
         return obs, {}
 

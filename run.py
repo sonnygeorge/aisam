@@ -65,17 +65,28 @@ if __name__ == "__main__":
 
     env = BlockGameEnv(n_blocks=n_blocks, n_stacks=n_stacks, max_episode_length=18)
     policy = BlockGamePolicyNet(
-        n_blocks=env.n_blocks, n_stacks=env.n_stacks, embed_dim=8, num_heads=2, num_layers=1
+        n_blocks=env.n_blocks,
+        n_stacks=env.n_stacks,
+        embed_dim=24,
+        num_heads=4,
+        num_decoder_layers=2,
+        num_encoder_layers=2,
     )
     value_net = BlockGameValueNet(
-        n_blocks=env.n_blocks, n_stacks=env.n_stacks, embed_dim=8, num_heads=2, num_layers=1
+        n_blocks=env.n_blocks,
+        n_stacks=env.n_stacks,
+        embed_dim=24,
+        num_heads=4,
+        num_decoder_layers=2,
+        num_encoder_layers=2,
     )
+
     get_sampled_action = partial(
         get_sampled_action_or_curriculum_valid_action,
         force_valid_action_starting_prob=0.53,
         force_valid_action_min_prob=0.09,
-        force_valid_action_decay_rate=3e-7,
-        begin_decay_at=500_000,
+        force_valid_action_decay_rate=3e-8,
+        begin_decay_at=2_000_000,
     )
 
     start = datetime.now()
@@ -85,12 +96,12 @@ if __name__ == "__main__":
         env=env,
         policy=policy,
         value_net=value_net,
-        total_timesteps=4_000_000,
+        total_timesteps=10_000_000,
         steps_per_update=1024,
         learning_rate=3e-4,
         ppo_epochs=10,
-        save_interval=300_000,
-        log_interval=8_192,
+        save_interval=500_000,
+        log_interval=50_000,
         save_path=f"blockgame_{n_blocks}:{n_stacks}_ppo.pt",
         get_sampled_action=get_sampled_action,
     )
