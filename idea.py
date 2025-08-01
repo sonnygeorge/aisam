@@ -105,9 +105,9 @@ class RecursiveGoalInferrer(nn.Module):
         pred_stop_probs: torch.Tensor,  # Shape: (batch_size,)
     ) -> torch.Tensor:
         if self.should_assign_credit_for_stop_probs:
-            target = (self.target_recursion_stop_levels_of_batch == recursion_level).float()
-            # ∂(MSE)/∂(y_pred) = (y_pred - y_true)
-            return pred_stop_probs - target
+            target_probs = (self.target_recursion_stop_levels_of_batch == recursion_level).float()
+            # ∂(MSE)/∂(y_pred) = 2 * (y_pred - y_true) / N
+            return 2 * (pred_stop_probs - target_probs) / pred_stop_probs.shape[0]
         else:
             return torch.full_like(pred_stop_probs, 0.0, dtype=pred_stop_probs.dtype)
 
