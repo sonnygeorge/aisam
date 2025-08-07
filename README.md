@@ -182,3 +182,11 @@ Hypothesis 3:
 Hypothesis 4:
 - Because 3, leveraging this will be an advantageous solution to training a generalist/foundation latent goal/action policy
 
+___
+
+NOTE: 
+- Notice how nothing appeals to learning tasks in a more memory-efficient way. That is already/given proposed by by ACT/PonderNet. The crux is, (remember the addage, smallest model possible is usually the most generalizing), the fewer the parameters (by learning abstract(?) recursible sub-programs for getting desired output) the more generalizing (I.e, BETTER/USEFUL) the (generalist) policy will be.
+
+___
+
+... Leverage JEPA learning algo somehow for predicting in latent space?
